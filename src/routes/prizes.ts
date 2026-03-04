@@ -4,12 +4,38 @@ import { authMiddleware, requireRole } from '../middleware/auth'
 import { AppError } from '../middleware/error-handler'
 import { generateId, generateToken } from '../utils/crypto'
 import { getAvailablePoints, expirePoints } from '../services/points'
+import { fileUrl } from '../utils/url'
 
 const prizes = new Hono<{ Bindings: Env; Variables: ContextVariables }>()
 
 prizes.use('*', authMiddleware)
 
 // === 管理者：奖品 CRUD ===
+
+// 上传奖品图片（独立接口，选择图片后立即调用）
+prizes.post('/upload-image', requireRole('manager'), async (c) => {
+  const managerId = c.get('userId')
+  const formData = await c.req.formData()
+  const imageFile = formData.get('image') as File | null
+
+  if (!imageFile || imageFile.size === 0) {
+    throw new AppError(400, '请选择图片')
+  }
+  if (imageFile.size > 2 * 1024 * 1024) {
+    throw new AppError(400, '图片不能超过2MB')
+  }
+
+  const ext = imageFile.name.split('.').pop() || 'jpg'
+  const imageKey = `prizes/${managerId}/${generateId()}.${ext}`
+  await c.env.R2.put(imageKey, imageFile.stream(), {
+    httpMetadata: { contentType: imageFile.type },
+  })
+
+  return c.json({
+    success: true,
+    data: { image_key: imageKey, image_url: fileUrl(c, imageKey) },
+  })
+})
 
 // 创建奖品
 prizes.post('/', requireRole('manager'), async (c) => {
@@ -26,13 +52,17 @@ prizes.post('/', requireRole('manager'), async (c) => {
     throw new AppError(400, '奖品名称、积分和库存为必填')
   }
 
-  let imageKey: string | null = null
-  if (imageFile && imageFile.size > 0) {
-    const ext = imageFile.name.split('.').pop() || 'jpg'
-    imageKey = `prizes/${managerId}/${generateId()}.${ext}`
-    await c.env.R2.put(imageKey, imageFile.stream(), {
-      httpMetadata: { contentType: imageFile.type },
-    })
+  // 支持两种方式：1) 通过 upload-image 接口预上传后传 image_key，2) 直接上传 image 文件
+  let imageKey: string | null = (formData.get('image_key') as string) || null
+  if (!imageKey) {
+    const imageFile = formData.get('image') as File | null
+    if (imageFile && imageFile.size > 0) {
+      const ext = imageFile.name.split('.').pop() || 'jpg'
+      imageKey = `prizes/${managerId}/${generateId()}.${ext}`
+      await c.env.R2.put(imageKey, imageFile.stream(), {
+        httpMetadata: { contentType: imageFile.type },
+      })
+    }
   }
 
   const id = generateId()
@@ -78,15 +108,22 @@ prizes.put('/:id', requireRole('manager'), async (c) => {
   const isActive = formData.get('is_active') as string | null
   if (isActive !== null) { updates.push('is_active = ?'); values.push(isActive === '1' ? 1 : 0) }
 
-  const imageFile = formData.get('image') as File | null
-  if (imageFile && imageFile.size > 0) {
-    const ext = imageFile.name.split('.').pop() || 'jpg'
-    const imageKey = `prizes/${managerId}/${generateId()}.${ext}`
-    await c.env.R2.put(imageKey, imageFile.stream(), {
-      httpMetadata: { contentType: imageFile.type },
-    })
+  // 支持预上传的 image_key 或直接上传文件
+  const preUploadedKey = formData.get('image_key') as string | null
+  if (preUploadedKey) {
     updates.push('image_key = ?')
-    values.push(imageKey)
+    values.push(preUploadedKey)
+  } else {
+    const imageFile = formData.get('image') as File | null
+    if (imageFile && imageFile.size > 0) {
+      const ext = imageFile.name.split('.').pop() || 'jpg'
+      const imageKey = `prizes/${managerId}/${generateId()}.${ext}`
+      await c.env.R2.put(imageKey, imageFile.stream(), {
+        httpMetadata: { contentType: imageFile.type },
+      })
+      updates.push('image_key = ?')
+      values.push(imageKey)
+    }
   }
 
   if (updates.length === 0) {
@@ -113,7 +150,7 @@ prizes.get('/manage', requireRole('manager'), async (c) => {
 
   const data = results.map((r: any) => ({
     ...r,
-    image_url: r.image_key ? `/api/files/${r.image_key}` : null,
+    image_url: r.image_key ? fileUrl(c, r.image_key) : null,
   }))
 
   return c.json({ success: true, data })
@@ -141,7 +178,7 @@ prizes.get('/shop', async (c) => {
 
   const data = results.map((r: any) => ({
     ...r,
-    image_url: r.image_key ? `/api/files/${r.image_key}` : null,
+    image_url: r.image_key ? fileUrl(c, r.image_key) : null,
     can_redeem: r.stock > 0 && available >= r.points_required,
     points_short: Math.max(0, r.points_required - available),
   }))

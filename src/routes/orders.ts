@@ -3,6 +3,7 @@ import type { Env, ContextVariables } from '../types'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { AppError } from '../middleware/error-handler'
 import { generateId } from '../utils/crypto'
+import { fileUrl } from '../utils/url'
 
 const orders = new Hono<{ Bindings: Env; Variables: ContextVariables }>()
 
@@ -37,7 +38,7 @@ orders.get('/mine', async (c) => {
 
   const data = results.map((r: any) => ({
     ...r,
-    prize_image_url: r.prize_image_key ? `/api/files/${r.prize_image_key}` : null,
+    prize_image_url: r.prize_image_key ? fileUrl(c, r.prize_image_key) : null,
   }))
 
   return c.json({ success: true, data })

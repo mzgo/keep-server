@@ -20,17 +20,6 @@ files.get('/:path{.+}', async (c) => {
     throw new AppError(403, '非法路径')
   }
 
-  // 检查 Referer，限制只能从前端站点或本地开发环境访问
-  const referer = c.req.header('Referer') || ''
-  const frontendUrl = c.env.FRONTEND_URL
-  const isAllowedReferer =
-    !referer ||
-    referer.startsWith(frontendUrl) ||
-    referer.startsWith('http://localhost:')
-  if (!isAllowedReferer) {
-    throw new AppError(403, '访问被拒绝')
-  }
-
   const object = await c.env.R2.get(path)
 
   if (!object) {

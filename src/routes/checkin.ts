@@ -5,6 +5,7 @@ import { AppError } from '../middleware/error-handler'
 import { generateId } from '../utils/crypto'
 import { getLogicalDate, calculateConsecutiveDays } from '../utils/date'
 import { settlePointsAfterCheckin, checkAndApplyPenalty } from '../services/points'
+import { fileUrl } from '../utils/url'
 
 const checkin = new Hono<{ Bindings: Env; Variables: ContextVariables }>()
 
@@ -81,7 +82,7 @@ checkin.post('/', async (c) => {
     data: {
       id: checkinId,
       checkin_date: today,
-      image_url: `/api/files/${imageKey}`,
+      image_url: fileUrl(c, imageKey),
     },
   })
 })
@@ -172,7 +173,7 @@ checkin.get('/history', async (c) => {
   // 补充图片URL
   const data = results.map((r: any) => ({
     ...r,
-    image_url: `/api/files/${r.image_key}`,
+    image_url: fileUrl(c, r.image_key),
   }))
 
   return c.json({ success: true, data })
@@ -207,7 +208,7 @@ checkin.get('/calendar', async (c) => {
 
   const data = results.map((r: any) => ({
     date: r.checkin_date,
-    image_url: `/api/files/${r.image_key}`,
+    image_url: fileUrl(c, r.image_key),
   }))
 
   return c.json({ success: true, data })
@@ -248,7 +249,7 @@ checkin.get('/manager/records', async (c) => {
 
   const data = results.map((r: any) => ({
     ...r,
-    image_url: `/api/files/${r.image_key}`,
+    image_url: fileUrl(c, r.image_key),
   }))
 
   return c.json({ success: true, data })

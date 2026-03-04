@@ -5,6 +5,7 @@ import { generateId, generateSalt, generateToken, hashPassword, verifyPassword }
 import { signJwt } from '../utils/jwt'
 import { AppError } from '../middleware/error-handler'
 import { authMiddleware } from '../middleware/auth'
+import { fileUrl, resolveFileUrl } from '../utils/url'
 
 const auth = new Hono<{ Bindings: Env; Variables: ContextVariables }>()
 
@@ -68,6 +69,7 @@ auth.post('/register', async (c) => {
   const now = Date.now()
 
   let managerId: string | null = null
+  let invitationId: string | null = null
 
   // 打卡者必须通过邀请码注册
   if (body.role === 'checker') {
@@ -87,18 +89,21 @@ auth.post('/register', async (c) => {
     }
 
     managerId = invitation.manager_id
-
-    // 标记邀请码为已使用
-    await c.env.DB.prepare(
-      'UPDATE invitations SET is_used = 1, used_by = ?, used_at = ? WHERE id = ?'
-    ).bind(userId, now, invitation.id).run()
+    invitationId = invitation.id
   }
 
-  // 创建用户
+  // 先创建用户（必须在更新邀请码之前，否则 invitations.used_by 外键约束会失败）
   await c.env.DB.prepare(
     `INSERT INTO users (id, username, password_hash, salt, email, nickname, avatar_url, role, manager_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`
   ).bind(userId, body.username, passwordHash, salt, body.email || null, body.username, body.role, managerId, now, now).run()
+
+  // 标记邀请码为已使用（用户已插入，外键约束满足）
+  if (invitationId) {
+    await c.env.DB.prepare(
+      'UPDATE invitations SET is_used = 1, used_by = ?, used_at = ? WHERE id = ?'
+    ).bind(userId, now, invitationId).run()
+  }
 
   // 管理者自动创建默认配置
   if (body.role === 'manager') {
@@ -188,7 +193,7 @@ auth.post('/login', async (c) => {
         id: user.id,
         username: user.username,
         nickname: user.nickname,
-        avatar_url: user.avatar_url,
+        avatar_url: resolveFileUrl(c, user.avatar_url),
         role: user.role,
         email: user.email,
         manager_id: user.manager_id,
@@ -261,7 +266,8 @@ auth.get('/me', authMiddleware, async (c) => {
     throw new AppError(404, '用户不存在')
   }
 
-  return c.json({ success: true, data: user })
+  const userData = { ...(user as any), avatar_url: resolveFileUrl(c, (user as any).avatar_url) }
+  return c.json({ success: true, data: userData })
 })
 
 // 修改个人信息
@@ -369,13 +375,13 @@ auth.post('/avatar', authMiddleware, async (c) => {
     await c.env.R2.delete(oldAvatarKey).catch(() => {})
   }
 
-  const avatarUrl = `/api/files/${key}`
+  const avatarPath = `/api/files/${key}`
 
   await c.env.DB.prepare(
     'UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?'
-  ).bind(avatarUrl, Date.now(), userId).run()
+  ).bind(avatarPath, Date.now(), userId).run()
 
-  return c.json({ success: true, data: { avatar_url: avatarUrl } })
+  return c.json({ success: true, data: { avatar_url: fileUrl(c, key) } })
 })
 
 export default auth
