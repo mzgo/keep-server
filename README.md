@@ -42,7 +42,7 @@ npm install
 
 ```bash
 # 生成并设置 JWT 密钥（随机字符串，生产环境必须设置）
-wrangler secret put JWT_SECRET
+wrangler secret put JWT_SECRET {随机字符串}
 ```
 
 ### 初始化数据库
