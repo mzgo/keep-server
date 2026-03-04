@@ -1,14 +1,16 @@
 import { Hono } from 'hono'
 import type { Env } from './types'
 import { createCorsMiddleware } from './middleware/cors'
-import { errorHandler } from './middleware/error-handler'
+import { onAppError } from './middleware/error-handler'
 import api from './routes'
 
 const app = new Hono<{ Bindings: Env }>()
 
+// 全局错误处理（Hono 内部 compose 会调用 onError，middleware 形式无法拦截）
+app.onError(onAppError)
+
 // 全局中间件
 app.use('*', createCorsMiddleware())
-app.use('*', errorHandler)
 
 // API 路由
 app.route('/api', api)

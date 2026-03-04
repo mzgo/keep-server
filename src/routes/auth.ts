@@ -351,12 +351,23 @@ auth.post('/avatar', authMiddleware, async (c) => {
     throw new AppError(400, '头像图片不能超过2MB')
   }
 
+  // 查询当前头像路径，上传新头像后清理旧文件
+  const currentUser = await c.env.DB.prepare(
+    'SELECT avatar_url FROM users WHERE id = ?'
+  ).bind(userId).first<{ avatar_url: string | null }>()
+  const oldAvatarKey = currentUser?.avatar_url?.replace('/api/files/', '') || null
+
   const ext = file.name.split('.').pop() || 'png'
   const key = `avatars/${userId}.${ext}`
 
   await c.env.R2.put(key, file.stream(), {
     httpMetadata: { contentType: file.type },
   })
+
+  // 清理旧头像文件（key 不同时才删除，避免覆盖同名文件后误删）
+  if (oldAvatarKey && oldAvatarKey !== key) {
+    await c.env.R2.delete(oldAvatarKey).catch(() => {})
+  }
 
   const avatarUrl = `/api/files/${key}`
 

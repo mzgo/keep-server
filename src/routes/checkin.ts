@@ -57,16 +57,14 @@ checkin.post('/', async (c) => {
     throw new AppError(400, '请上传打卡照片')
   }
 
-  // 存储图片到 R2
+  // 创建打卡记录 ID 并构建 R2 路径
+  const checkinId = generateId()
   const ext = imageFile.name.split('.').pop() || 'jpg'
-  const imageKey = `checkins/${userId}/${today}.${ext}`
+  const imageKey = `checkins/${user.manager_id}/${today}/${checkinId}.${ext}`
 
   await c.env.R2.put(imageKey, imageFile.stream(), {
     httpMetadata: { contentType: imageFile.type },
   })
-
-  // 创建打卡记录
-  const checkinId = generateId()
   await c.env.DB.prepare(
     `INSERT INTO checkins (id, user_id, manager_id, image_key, note, checkin_date, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
