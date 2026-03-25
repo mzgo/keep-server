@@ -1,0 +1,29 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Build
+*.class
+*.jar
+!.mvn/wrapper/*.jar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Env
+.env
+*.env.local

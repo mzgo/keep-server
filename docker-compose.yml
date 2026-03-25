@@ -1,0 +1,75 @@
+services:
+  keep-server:
+    image: ghcr.io/mzgo/keep-server:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - keep-data:/app/data
+    environment:
+      - KEEP_DB_PATH=/app/data/keep.db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - QINIU_ACCESS_KEY=${QINIU_ACCESS_KEY}
+      - QINIU_SECRET_KEY=${QINIU_SECRET_KEY}
+      - QINIU_BUCKET=${QINIU_BUCKET}
+      - QINIU_DOMAIN=${QINIU_DOMAIN}
+      - MAIL_HOST=${MAIL_HOST:-}
+      - MAIL_PORT=${MAIL_PORT:-465}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      update_config:
+        # 滚动更新: 新容器就绪后再停旧容器
+        order: start-first
+        failure_action: rollback
+
+  keep-frontend:
+    image: ghcr.io/mzgo/keep-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      keep-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy:
+      update_config:
+        order: start-first
+        failure_action: rollback
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  keep-data:
+  redis-data:

@@ -1,0 +1,74 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: keep-server
+
+  # SQLite 数据源
+  datasource:
+    url: jdbc:sqlite:${KEEP_DB_PATH:./data/keep.db}
+    driver-class-name: org.sqlite.JDBC
+    # SQLite WAL 模式, busy_timeout 5秒
+    hikari:
+      maximum-pool-size: 1
+      connection-init-sql: "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"
+
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  # Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+
+  # 邮件 (用于密码找回、邮箱验证)
+  mail:
+    host: ${MAIL_HOST:smtp.example.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.ssl.enable: true
+      mail.smtp.auth: true
+
+# JWT 配置
+jwt:
+  secret: ${JWT_SECRET:CHANGE_ME_TO_A_STRONG_SECRET_KEY_AT_LEAST_256_BITS}
+  expiration-hours: 72
+
+# 七牛云配置
+qiniu:
+  access-key: ${QINIU_ACCESS_KEY:your-access-key}
+  secret-key: ${QINIU_SECRET_KEY:your-secret-key}
+  bucket: ${QINIU_BUCKET:your-bucket-name}
+  domain: ${QINIU_DOMAIN:your-cdn-domain.com}
+  # 上传凭证有效时间(秒)
+  upload-token-expire: 3600
+  # 签名URL有效时间(秒)
+  signed-url-expire: 3600
+
+# 奖品兜底图URL
+prize:
+  default-image-url: ${PRIZE_DEFAULT_IMAGE:https://via.placeholder.com/200x200?text=Prize}
+
+# CORS 配置（生产请配置为实际前端域名，多个逗号分隔）
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,DELETE,OPTIONS}
+    allow-credentials: true
+    max-age: 3600
+
+# 日志
+logging:
+  level:
+    com.keep: DEBUG
+    org.hibernate.SQL: WARN
